@@ -17,11 +17,12 @@ const categories = [
   { name: 3, color: '#7378cc', label: 'Least access' }
 ]
 
-function MapController({ selectedNeighbourhoods, setSelectedNeighbourhoods, setPopupPosition, rankings }) {
+function MapController({ selectedNeighbourhoods, setSelectedNeighbourhoods, setPopupPosition, rankings, featureClickedRef }) {
   const map = useMap()
 
   useMapEvents({
     click() {
+      if (featureClickedRef.current) return
       setSelectedNeighbourhoods([])
       setPopupPosition(null)
     }
@@ -98,7 +99,6 @@ function LassoSelection({ lassoEnabled, setLassoEnabled, setSelectedNeighbourhoo
               setPopupPosition(event.latLngs[0])
             }
           }
-          setLassoEnabled(false)
         }
 
         map.on('lasso.finished', handleLassoFinished)
@@ -111,7 +111,7 @@ function LassoSelection({ lassoEnabled, setLassoEnabled, setSelectedNeighbourhoo
         map.off('lasso.finished')
       }
     }
-  }, [map, setSelectedNeighbourhoods, setPopupPosition, setLassoEnabled])
+  }, [map, setSelectedNeighbourhoods, setPopupPosition])
 
   useEffect(() => {
     if (!map || !lassoRef.current) return
@@ -134,11 +134,45 @@ export default function LeafletMap({ geojson, rankings }) {
   const [selectedNeighbourhoods, setSelectedNeighbourhoods] = useState([])
   const [popupPosition, setPopupPosition] = useState(null)
   const [lassoEnabled, setLassoEnabled] = useState(false)
+  const [compareEnabled, setCompareEnabled] = useState(false)
+
+  const featureClickedRef = useRef(false)
+  const lassoEnabledRef = useRef(lassoEnabled)
+  const compareEnabledRef = useRef(compareEnabled)
+
+  useEffect(() => {
+    lassoEnabledRef.current = lassoEnabled
+    if (lassoEnabled) setCompareEnabled(false)
+  }, [lassoEnabled])
+
+  useEffect(() => {
+    compareEnabledRef.current = compareEnabled
+    if (compareEnabled) setLassoEnabled(false)
+  }, [compareEnabled])
 
   const onEachFeature = useMemo(() => (feature, layer) => {
     if (feature.properties) {
       layer.on('click', (e) => {
         if (e.originalEvent) e.originalEvent.stopPropagation()
+        featureClickedRef.current = true
+        setTimeout(() => { featureClickedRef.current = false }, 50)
+
+        if (lassoEnabledRef.current) return
+
+        if (compareEnabledRef.current) {
+          setSelectedNeighbourhoods(prev => {
+            const isSelected = prev.some(f => f.properties.DGUID === feature.properties.DGUID)
+            if (isSelected) {
+              const newSelection = prev.filter(f => f.properties.DGUID !== feature.properties.DGUID)
+              if (newSelection.length === 0) setPopupPosition(null)
+              return newSelection
+            }
+            setPopupPosition(e.latlng)
+            return [...prev, feature]
+          })
+          return
+        }
+
         setPopupPosition(e.latlng)
         setSelectedNeighbourhoods([feature])
       })
@@ -193,6 +227,7 @@ export default function LeafletMap({ geojson, rankings }) {
           setSelectedNeighbourhoods={setSelectedNeighbourhoods}
           setPopupPosition={setPopupPosition}
           rankings={rankings}
+          featureClickedRef={featureClickedRef}
         />
 
         <LassoSelection
@@ -203,10 +238,17 @@ export default function LeafletMap({ geojson, rankings }) {
         />
 
         {selectedNeighbourhoods.length > 0 && popupPosition && (
-          <Popup position={popupPosition} closeButton={false}>
+          <Popup
+            key={`popup-${compareEnabled}-${selectedNeighbourhoods.length}`}
+            position={popupPosition}
+            closeButton={false}
+            maxWidth={800}
+            minWidth={50}
+          >
             <NeighbourhoodPopup
               features={selectedNeighbourhoods}
               onRemoveFeature={handleRemoveFeature}
+              isCompareMode={compareEnabled}
             />
           </Popup>
         )}
@@ -214,12 +256,20 @@ export default function LeafletMap({ geojson, rankings }) {
         <Legend categories={categories} />
       </MapContainer>
 
-      <button
-        onClick={() => setLassoEnabled(!lassoEnabled)}
-        className={`absolute top-3 right-35 z-[1000] px-3 py-2 bg-white rounded shadow-md font-bold text-sm border-2 transition-colors ${lassoEnabled ? 'border-blue-500 text-blue-500' : 'border-transparent text-gray-700 hover:bg-gray-50'}`}
-      >
-        {lassoEnabled ? 'Lasso Active' : 'Use Lasso'}
-      </button>
+      <div className="absolute top-4 right-4 flex flex-col gap-2" style={{ zIndex: 1000 }}>
+        <button
+          onClick={() => setLassoEnabled(!lassoEnabled)}
+          className={`px-3 py-2 bg-white rounded shadow-md font-bold text-sm border-2 transition-colors ${lassoEnabled ? 'border-blue-500 text-blue-500' : 'border-transparent text-gray-700 hover:bg-gray-50'}`}
+        >
+          {lassoEnabled ? 'Lasso Active' : 'Use Lasso'}
+        </button>
+        <button
+          onClick={() => setCompareEnabled(!compareEnabled)}
+          className={`px-3 py-2 bg-white rounded shadow-md font-bold text-sm border-2 transition-colors ${compareEnabled ? 'border-purple-500 text-purple-500' : 'border-transparent text-gray-700 hover:bg-gray-50'}`}
+        >
+          {compareEnabled ? 'Compare Active' : 'Compare'}
+        </button>
+      </div>
     </div>
   )
 }
