@@ -130,7 +130,7 @@ function LassoSelection({ lassoEnabled, setLassoEnabled, setSelectedNeighbourhoo
   return null
 }
 
-export default function LeafletMap({ geojson, rankings }) {
+export default function LeafletMap({ geojson, rankings, onRegionSelect }) {
   const [selectedNeighbourhoods, setSelectedNeighbourhoods] = useState([])
   const [popupPosition, setPopupPosition] = useState(null)
   const [lassoEnabled, setLassoEnabled] = useState(false)
@@ -140,6 +140,11 @@ export default function LeafletMap({ geojson, rankings }) {
   const lassoEnabledRef = useRef(lassoEnabled)
   const compareEnabledRef = useRef(compareEnabled)
 
+  useEffect(() => {
+    if (onRegionSelect) {
+      onRegionSelect(selectedNeighbourhoods.map(f => f.properties.DGUID));
+    }
+  }, [selectedNeighbourhoods, onRegionSelect]);
   useEffect(() => {
     lassoEnabledRef.current = lassoEnabled
     if (lassoEnabled) setCompareEnabled(false)

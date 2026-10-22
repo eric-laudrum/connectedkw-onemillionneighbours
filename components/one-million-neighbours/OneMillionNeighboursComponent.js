@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 
 import LeafletMap from "components/maps/LeafletMap";
 import OneMillionNeighboursLayout from "components/one-million-neighbours/OneMillionNeighboursLayout";
@@ -8,12 +8,12 @@ import calculateCombinedAssetRanks from "components/one-million-neighbours/utils
 import AssetFilters from "components/one-million-neighbours/AssetFilters";
 
 const ASSET_TYPES = [
-    { key: 'parks', label: 'Green Space' },
-    { key: 'schools', label: 'Schools' },
-    { key: 'libraries', label: 'Libraries' },
-    { key: 'health', label: 'Healthcare' },
-    { key: 'transit', label: 'Transit' },
-    { key: 'community_spaces', label: 'Community Spaces' },
+    { key: 'parks', label: 'Green Space', dataKey: 'assets_parks_count' },
+    { key: 'schools', label: 'Schools', dataKey: 'assets_schools_count' },
+    { key: 'libraries', label: 'Libraries', dataKey: 'assets_libraries_count' },
+    { key: 'health', label: 'Healthcare', dataKey: 'assets_health_count' },
+    { key: 'transit', label: 'Transit', dataKey: 'assets_transit_count' },
+    { key: 'community_spaces', label: 'Community Spaces', dataKey: 'assets_community_spaces_count' },
 ];
 
 const defaultGeoJSON = {
@@ -37,6 +37,8 @@ export default function OneMillionNeighboursComponent({ neighbourhoodData, neigh
         transit: true,
         community_spaces: true,
     });
+
+    const [activeNeighbourhoodIds, setActiveNeighbourhoodIds] = useState([]);
 
     const handleAssetToggle = (key) => {
         setSelectedAssets({
@@ -71,8 +73,49 @@ export default function OneMillionNeighboursComponent({ neighbourhoodData, neigh
         console.error(error)
     }
 
+
     const rankedNeighbourhoodData = calculateCombinedAssetRanks(selectedAssets, neighbourhoodData);
-    
+
+    let selectionTitle = null;
+    let selectionStats = null;
+
+    if (activeNeighbourhoodIds.length > 0) {
+        if (activeNeighbourhoodIds.length === 1) {
+            const geo = neighbourhoodGeography.find(g => g.DGUID === activeNeighbourhoodIds[0]);
+            selectionTitle = geo?.GEO_NAME || 'Selected Region';
+        } else {
+            selectionTitle = 'Custom Selection';
+        }
+
+        const activeData = neighbourhoodData.filter(n => activeNeighbourhoodIds.includes(n.DGUID));
+
+        selectionStats = ASSET_TYPES.reduce((acc, asset) => {
+            const totalAssets = activeData.reduce((sum, n) => sum + (Number(n[asset.dataKey]) || 0), 0);
+            const totalPopulation = activeData.reduce((sum, n) => sum + (Number(n.population_2021) || 0), 0);
+            acc[asset.key] = totalPopulation > 0 ? ((totalAssets / totalPopulation) * 1000).toFixed(2) : '-';
+            return acc;
+        }, {});
+    }
+
+    const activeNeighbourhoods = rankedNeighbourhoodData.filter(n => activeNeighbourhoodIds.includes(n.DGUID));
+
+    const handleRegionSelect = useCallback((selectedIds) => {
+        setActiveNeighbourhoodIds(prev => {
+            // Evaluate prev state against incoming state to prevent infinite render loop
+            if (prev.length === selectedIds.length && prev.every(id => selectedIds.includes(id))) {
+                return prev;
+            }
+            return selectedIds;
+        });
+    }, []);
+
+    const regionalAverages = ASSET_TYPES.reduce((acc, asset) => {
+        const totalAssets = neighbourhoodData.reduce((sum, n) => sum + (Number(n[asset.dataKey]) || 0), 0);
+        const totalPopulation = neighbourhoodData.reduce((sum, n) => sum + (Number(n.population_2021) || 0), 0);
+        acc[asset.key] = totalPopulation > 0 ? ((totalAssets / totalPopulation) * 1000).toFixed(2) : '0.00';
+        return acc;
+    }, {});
+
     // Create a map of DGUIDs to their rank groups (1, 2, or 3)
     const rankings = rankedNeighbourhoodData.reduce((acc, neighbourhood) => {
         acc[neighbourhood.DGUID] = neighbourhood.combined_rank;
@@ -85,15 +128,22 @@ export default function OneMillionNeighboursComponent({ neighbourhoodData, neigh
     }
 
     const sideBar = <AssetFilters
-        selectedAssets={selectedAssets}
-        onAssetToggle={handleAssetToggle}
-        assetTypes={ASSET_TYPES}
+      selectedAssets={selectedAssets}
+      onAssetToggle={handleAssetToggle}
+      assetTypes={ASSET_TYPES}
+      regionalAverages={regionalAverages}
+      selectionTitle={selectionTitle}
+      selectionStats={selectionStats}
     />
 
     return (
-        <OneMillionNeighboursLayout sidebar={sideBar}>
-            <LeafletMap geojson={neighbourhoodGeoJSON} rankings={rankings} />
-        </OneMillionNeighboursLayout>
+      <OneMillionNeighboursLayout sidebar={sideBar}>
+          <LeafletMap
+            geojson={neighbourhoodGeoJSON}
+            rankings={rankings}
+            onRegionSelect={handleRegionSelect}
+          />
+      </OneMillionNeighboursLayout>
     );
 
 }
