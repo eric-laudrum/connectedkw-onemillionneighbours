@@ -279,14 +279,15 @@ export default function LeafletMap({ geojson, rankings, onRegionSelect, regional
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M7 22a5 5 0 0 1-2-4" />
-            <path strokeLinecap="round" strokeLinejoin="round" d="M3.3 14A6.8 6.8 0 0 1 2 10c0-4.4 4.5-8 10-8s10 3.6 10 8-4.5 8-10 8a12 12 0 0 1-5-1" />
+            <path strokeLinecap="round" strokeLinejoin="round"
+                  d="M3.3 14A6.8 6.8 0 0 1 2 10c0-4.4 4.5-8 10-8s10 3.6 10 8-4.5 8-10 8a12 12 0 0 1-5-1" />
             <path strokeLinecap="round" strokeLinejoin="round" d="M5 18a2 2 0 1 0 0-4 2 2 0 0 0 0 4z" />
           </svg>
         </button>
         <button
           onClick={() => setCompareEnabled(!compareEnabled)}
           title="Select multiple"
-          className="p-2 bg-white rounded shadow hover:bg-gray-100 transition-colors"
+          className={`p-2 flex items-center justify-center bg-white rounded shadow-md border-2 transition-colors ${compareEnabled ? 'border-blue-500 text-blue-500 bg-blue-50' : 'border-transparent text-gray-700 hover:bg-gray-50'}`}
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -299,7 +300,7 @@ export default function LeafletMap({ geojson, rankings, onRegionSelect, regional
             strokeLinecap="round"
             strokeLinejoin="round"
           >
-            {/* Multi-select icon */}
+            {/* Multi-select icon*/}
             <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
             <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
           </svg>
