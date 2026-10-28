@@ -1,5 +1,8 @@
-export default function AssetFilters({ selectedAssets, onAssetToggle, assetTypes, regionalAverages, regionalScores, selectionTitle, selectionStats, selectionScores }) {
+import { useState } from "react";
+
+export default function AssetFilters({ selectedAssets, onAssetToggle, assetTypes, regionalAverages, regionalScores, selectionTitle, selectionStats, selectionScores, selectedRegions, onRemoveRegion }) {
     const selectedAssetCount = Object.values(selectedAssets).filter(Boolean).length;
+    const [isExpanded, setIsExpanded] = useState(false);
 
     const getScoreBg = (scoreVal) => {
         const score = parseFloat(scoreVal);
@@ -47,8 +50,34 @@ export default function AssetFilters({ selectedAssets, onAssetToggle, assetTypes
                       <thead>
                       <tr className="border-b border-gray-200">
                           <th className="py-3 px-4 font-semibold">Asset Filter</th>
+
+                          {/* Conditionally renders headers for individual regions when expanded */}
+                          {isExpanded && selectedRegions.length > 1 && selectedRegions.map(region => (
+                            <th key={region.id} className="py-3 px-4 font-semibold text-right text-blue-800 text-xs">
+                                {region.name}
+                            </th>
+                          ))}
+
                           {selectionTitle && (
-                            <th className="py-3 px-4 font-semibold text-right text-blue-600">{selectionTitle}</th>
+                            <th className="py-3 px-4 font-semibold text-right text-blue-600">
+                                <div className="flex items-center justify-end gap-2">
+                                    {selectedRegions.length > 1 && (
+                                      <button
+                                        onClick={() => setIsExpanded(!isExpanded)}
+                                        className="p-1 rounded hover:bg-blue-50 text-blue-400 hover:text-blue-600 transition-colors"
+                                        aria-label="Toggle individual regions"
+                                      >
+                                          <svg
+                                            className={`w-4 h-4 transform transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                                            fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                                    d="M15 19l-7-7 7-7" />
+                                          </svg>
+                                      </button>
+                                    )}
+                                    <span>{selectionTitle}</span>
+                                </div>
+                            </th>
                           )}
                           <th className="py-3 px-4 font-semibold text-right">Region (per 1000)</th>
                       </tr>
@@ -59,9 +88,11 @@ export default function AssetFilters({ selectedAssets, onAssetToggle, assetTypes
                           const isDisabled = selectedAssetCount === 1 && isSelected;
 
                           return (
-                            <tr key={key} className="border-b border-gray-100">
+                            <tr key={key}
+                                className={`border-b border-gray-100 transition-all ${!isSelected ? 'opacity-50 grayscale' : ''}`}>
                                 <td className={`py-3 px-4 transition-colors ${isSelected ? 'bg-blue-50' : 'bg-white'}`}>
-                                    <label className={`flex items-center ${isDisabled ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}>
+                                    <label
+                                      className={`flex items-center ${isDisabled ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}>
                                         <input
                                           type="checkbox"
                                           checked={isSelected}
@@ -72,12 +103,20 @@ export default function AssetFilters({ selectedAssets, onAssetToggle, assetTypes
                                         <span className="ml-3 text-sm font-medium">{label}</span>
                                     </label>
                                 </td>
+                                {isExpanded && selectedRegions.length > 1 && selectedRegions.map(region => (
+                                  <td key={region.id}
+                                      className={`py-3 px-4 text-right font-medium transition-colors ${getScoreStyle(region.scores[key])}`}>
+                                      {region.stats[key]}
+                                  </td>
+                                ))}
                                 {selectionStats && (
-                                  <td className={`py-3 px-4 text-right font-medium transition-colors ${getScoreStyle(selectionScores[key])}`}>
+                                  <td
+                                    className={`py-3 px-4 text-right font-medium transition-colors ${getScoreStyle(selectionScores[key])}`}>
                                       {selectionStats[key]}
                                   </td>
                                 )}
-                                <td className={`py-3 px-4 text-right transition-colors ${getScoreStyle(regionalScores[key])}`}>
+                                <td
+                                  className={`py-3 px-4 text-right transition-colors ${getScoreStyle(regionalScores[key])}`}>
                                     {regionalAverages[key]}
                                 </td>
                             </tr>
@@ -86,6 +125,52 @@ export default function AssetFilters({ selectedAssets, onAssetToggle, assetTypes
                       </tbody>
                   </table>
               </div>
+
+              {/* Table Legend */}
+              <div className="mt-4 pt-3 border-t border-gray-200 text-xs text-gray-600">
+                  <div className="font-semibold text-gray-700 mb-2">Access Tiers</div>
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+                      <div className="flex items-center gap-1.5">
+                          <span className="w-3 h-3 rounded bg-[#00B88A] inline-block"></span>
+                          <span>Most Access</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                          <span className="w-3 h-3 rounded bg-[#DE54A0] inline-block"></span>
+                          <span>Average Access</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                          <span className="w-3 h-3 rounded bg-[#7378cc] inline-block"></span>
+                          <span>Least Access</span>
+                      </div>
+                  </div>
+                  <p className="mt-2 text-[11px] text-gray-400">
+                      Deeper shades indicate stronger statistical deviation from the regional average.
+                  </p>
+              </div>
+
+              {selectedRegions && selectedRegions.length > 0 && (
+                <div className="mt-6 border-t border-gray-200 pt-4">
+                    <h3 className="text-sm font-semibold text-gray-900 mb-3">Selected Regions:</h3>
+                    <ul className="text-sm text-gray-600 space-y-2 max-h-48 overflow-y-auto pl-1 pr-2">
+                        {selectedRegions.map((region) => (
+                          <li key={region.id}
+                              className="flex items-center justify-between bg-gray-50 border border-gray-100 px-3 py-2 rounded-md">
+                              <span className="font-medium">{region.name}</span>
+                              <button
+                                onClick={() => onRemoveRegion(region.id)}
+                                className="text-gray-400 hover:text-red-500 transition-colors"
+                                aria-label="Remove region"
+                              >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                            d="M6 18L18 6M6 6l12 12" />
+                                  </svg>
+                              </button>
+                          </li>
+                        ))}
+                    </ul>
+                </div>
+              )}
           </div>
       </aside>
     );

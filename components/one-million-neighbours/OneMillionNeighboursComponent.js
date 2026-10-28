@@ -79,16 +79,34 @@ export default function OneMillionNeighboursComponent({ neighbourhoodData, neigh
     let selectionTitle = null;
     let selectionStats = null;
     let selectionScores = null;
+    let selectedRegions = [];
 
     if (activeNeighbourhoodIds.length > 0) {
+        const activeGeos = neighbourhoodGeography.filter(g => activeNeighbourhoodIds.includes(g.DGUID));
+        const activeData = neighbourhoodData.filter(n => activeNeighbourhoodIds.includes(n.DGUID));
+
+        // Maps ID, Name, and calculates individual stats/scores for rendering expanded columns
+        selectedRegions = activeGeos.map(g => {
+            const data = activeData.find(d => d.DGUID === g.DGUID);
+            const stats = {};
+            const scores = {};
+
+            if (data) {
+                const pop = Number(data.population_2021) || 0;
+                ASSET_TYPES.forEach(asset => {
+                    const count = Number(data[asset.dataKey]) || 0;
+                    stats[asset.key] = pop > 0 ? ((count / pop) * 1000).toFixed(2) : '-';
+                    scores[asset.key] = Number(data[asset.scoreKey]) || 0;
+                });
+            }
+            return { id: g.DGUID, name: g.GEO_NAME, stats, scores };
+        });
+
         if (activeNeighbourhoodIds.length === 1) {
-            const geo = neighbourhoodGeography.find(g => g.DGUID === activeNeighbourhoodIds[0]);
-            selectionTitle = geo?.GEO_NAME || 'Selected Region';
+            selectionTitle = selectedRegions[0].name || 'Selected Region';
         } else {
             selectionTitle = 'Custom Selection';
         }
-
-        const activeData = neighbourhoodData.filter(n => activeNeighbourhoodIds.includes(n.DGUID));
 
         selectionStats = ASSET_TYPES.reduce((acc, asset) => {
             const totalAssets = activeData.reduce((sum, n) => sum + (Number(n[asset.dataKey]) || 0), 0);
@@ -114,6 +132,10 @@ export default function OneMillionNeighboursComponent({ neighbourhoodData, neigh
             }
             return selectedIds;
         });
+    }, []);
+
+    const handleRemoveRegion = useCallback((idToRemove) => {
+        setActiveNeighbourhoodIds(prev => prev.filter(id => id !== idToRemove));
     }, []);
 
     const regionalAverages = ASSET_TYPES.reduce((acc, asset) => {
@@ -149,6 +171,8 @@ export default function OneMillionNeighboursComponent({ neighbourhoodData, neigh
       selectionTitle={selectionTitle}
       selectionStats={selectionStats}
       selectionScores={selectionScores}
+      selectedRegions={selectedRegions}
+      onRemoveRegion={handleRemoveRegion}
     />
 
     return (
