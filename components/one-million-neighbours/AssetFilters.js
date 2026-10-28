@@ -1,8 +1,22 @@
 import { useState } from "react";
 
-export default function AssetFilters({ selectedAssets, onAssetToggle, assetTypes, regionalAverages, regionalScores, selectionTitle, selectionStats, selectionScores, selectedRegions, onRemoveRegion }) {
+export default function AssetFilters({
+                                         selectedAssets,
+                                         onAssetToggle,
+                                         assetTypes,
+                                         profileTypes = [],
+                                         regionalAverages,
+                                         regionalScores,
+                                         regionalProfileAverages = {},
+                                         selectionTitle,
+                                         selectionStats,
+                                         selectionScores,
+                                         selectionProfileStats = {},
+                                         selectedRegions = [],
+                                         onRemoveRegion }) {
     const selectedAssetCount = Object.values(selectedAssets).filter(Boolean).length;
     const [isExpanded, setIsExpanded] = useState(false);
+    const [showProfile, setShowProfile] = useState(false);
 
     const getScoreBg = (scoreVal) => {
         const score = parseFloat(scoreVal);
@@ -123,6 +137,61 @@ export default function AssetFilters({ selectedAssets, onAssetToggle, assetTypes
                           );
                       })}
                       </tbody>
+
+                      {/* Expand button row */}
+                      <tbody>
+                      <tr>
+                          <td colSpan={10} className="py-2 px-2 bg-gray-50 border-y border-gray-200">
+                              <button
+                                type="button"
+                                onClick={() => setShowProfile(!showProfile)}
+                                className="flex items-center gap-2 text-xs font-semibold text-gray-700 w-full hover:text-blue-600 transition-colors py-1 cursor-pointer"
+                              >
+                                  <svg
+                                    className={`w-4 h-4 transform transition-transform ${showProfile ? 'rotate-180' : ''}`}
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                  </svg>
+                                  <span>Neighbourhood Profile</span>
+                              </button>
+                          </td>
+                      </tr>
+                      </tbody>
+
+                      {/* Profile data rows displayed when expanded */}
+                      {showProfile && (
+                        <tbody>
+                        {profileTypes.map(({ key, label }) => (
+                          <tr key={key} className="border-b border-gray-100 bg-white">
+                              <td className="py-3 px-4 text-sm text-gray-700">
+                                  {label}
+                              </td>
+
+                              {isExpanded && selectedRegions.length > 1 && selectedRegions.map(region => (
+                                <td key={`${region.id}-${key}`} className="py-3 px-2 w-24 text-center text-sm transition-colors bg-gray-50 text-gray-700">
+                                    {region.profileStats?.[key] ? `${region.profileStats[key]}%` : '-'}
+                                </td>
+                              ))}
+
+                              {selectionTitle && (
+                                <td className="py-3 px-2 w-24 text-center text-sm font-medium transition-colors bg-gray-100 text-gray-900">
+                                    {selectionProfileStats?.[key] ? `${selectionProfileStats[key]}%` : '-'}
+                                </td>
+                              )}
+
+                              <td className="py-3 px-2 w-24 text-center text-sm transition-colors bg-gray-50 text-gray-700">
+                                  {regionalProfileAverages?.[key] ? `${regionalProfileAverages[key]}%` : '-'}
+                              </td>
+
+                          </tr>
+                        ))}
+                        </tbody>
+                      )}
+
+
                   </table>
               </div>
 

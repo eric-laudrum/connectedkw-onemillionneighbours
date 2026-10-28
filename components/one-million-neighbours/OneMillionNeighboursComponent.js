@@ -16,6 +16,17 @@ const ASSET_TYPES = [
     { key: 'community_spaces', label: 'Community Spaces', dataKey: 'assets_community_spaces_count', scoreKey: 'assets_community_spaces_score' },
 ];
 
+const PROFILE_STATS = [
+    { key: 'single_detached_house', label: 'Single-detached housing' },
+    { key: 'crowded', label: 'Overcrowded housing' },
+    { key: 'shelter_costs_over_30_percent', label: 'Unaffordable housing' },
+    { key: 'commute_transit', label: 'Transit commuters' },
+    { key: 'children', label: 'Households with children' },
+    { key: 'low_income', label: 'Low-income households' },
+    { key: 'non_official_language', label: 'Non-official language speakers' },
+    { key: 'visible_minority', label: 'Visible minorities' }
+];
+
 const defaultGeoJSON = {
     "type": "FeatureCollection",
     "crs": {
@@ -80,6 +91,7 @@ export default function OneMillionNeighboursComponent({ neighbourhoodData, neigh
     let selectionStats = null;
     let selectionScores = null;
     let selectedRegions = [];
+    let selectionProfileStats = null;
 
     if (activeNeighbourhoodIds.length > 0) {
         const activeGeos = neighbourhoodGeography.filter(g => activeNeighbourhoodIds.includes(g.DGUID));
@@ -90,16 +102,20 @@ export default function OneMillionNeighboursComponent({ neighbourhoodData, neigh
             const data = activeData.find(d => d.DGUID === g.DGUID);
             const stats = {};
             const scores = {};
+            const profileStats = {};
 
             if (data) {
                 const pop = Number(data.population_2021) || 0;
                 ASSET_TYPES.forEach(asset => {
                     const count = Number(data[asset.dataKey]) || 0;
-                    stats[asset.key] = pop > 0 ? ((count / pop) * 1000).toFixed(2) : '-';
+                    stats[asset.key] = pop > 0 ? ((count / pop) * 1000).toFixed(1) : '-';
                     scores[asset.key] = Number(data[asset.scoreKey]) || 0;
                 });
+                PROFILE_STATS.forEach(stat => {
+                    profileStats[stat.key] = data[stat.key] !== undefined ? Number(data[stat.key]).toFixed(1) : '-';
+                });
             }
-            return { id: g.DGUID, name: g.GEO_NAME, stats, scores };
+            return { id: g.DGUID, name: g.GEO_NAME, stats, scores, profileStats };
         });
 
         if (activeNeighbourhoodIds.length === 1) {
@@ -111,13 +127,19 @@ export default function OneMillionNeighboursComponent({ neighbourhoodData, neigh
         selectionStats = ASSET_TYPES.reduce((acc, asset) => {
             const totalAssets = activeData.reduce((sum, n) => sum + (Number(n[asset.dataKey]) || 0), 0);
             const totalPopulation = activeData.reduce((sum, n) => sum + (Number(n.population_2021) || 0), 0);
-            acc[asset.key] = totalPopulation > 0 ? ((totalAssets / totalPopulation) * 1000).toFixed(2) : '-';
+            acc[asset.key] = totalPopulation > 0 ? ((totalAssets / totalPopulation) * 1000).toFixed(1) : '-';
             return acc;
         }, {});
 
         selectionScores = ASSET_TYPES.reduce((acc, asset) => {
             const totalScore = activeData.reduce((sum, n) => sum + (Number(n[asset.scoreKey]) || 0), 0);
             acc[asset.key] = activeData.length > 0 ? (totalScore / activeData.length) : 0;
+            return acc;
+        }, {});
+
+        selectionProfileStats = PROFILE_STATS.reduce((acc, stat) => {
+            const total = activeData.reduce((sum, n) => sum + (Number(n[stat.key]) || 0), 0);
+            acc[stat.key] = activeData.length > 0 ? (total / activeData.length).toFixed(1) : '-';
             return acc;
         }, {});
     }
@@ -151,6 +173,12 @@ export default function OneMillionNeighboursComponent({ neighbourhoodData, neigh
         return acc;
     }, {});
 
+    const regionalProfileAverages = PROFILE_STATS.reduce((acc, stat) => {
+        const total = neighbourhoodData.reduce((sum, n) => sum + (Number(n[stat.key]) || 0), 0);
+        acc[stat.key] = totalNeighbourhoods > 0 ? (total / totalNeighbourhoods).toFixed(1) : '-';
+        return acc;
+    }, {});
+
     // Create a map of DGUIDs to their rank groups (1, 2, or 3)
     const rankings = rankedNeighbourhoodData.reduce((acc, neighbourhood) => {
         acc[neighbourhood.DGUID] = neighbourhood.combined_rank;
@@ -166,11 +194,14 @@ export default function OneMillionNeighboursComponent({ neighbourhoodData, neigh
       selectedAssets={selectedAssets}
       onAssetToggle={handleAssetToggle}
       assetTypes={ASSET_TYPES}
+      profileTypes={PROFILE_STATS}
       regionalAverages={regionalAverages}
       regionalScores={regionalScores}
+      regionalProfileAverages={regionalProfileAverages}
       selectionTitle={selectionTitle}
       selectionStats={selectionStats}
       selectionScores={selectionScores}
+      selectionProfileStats={selectionProfileStats}
       selectedRegions={selectedRegions}
       onRemoveRegion={handleRemoveRegion}
     />
@@ -181,6 +212,7 @@ export default function OneMillionNeighboursComponent({ neighbourhoodData, neigh
             geojson={neighbourhoodGeoJSON}
             rankings={rankings}
             onRegionSelect={handleRegionSelect}
+            regionalProfileAverages={regionalProfileAverages}
           />
       </OneMillionNeighboursLayout>
     );

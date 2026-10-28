@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-const NeighbourhoodPopup = ({ features, onRemoveFeature, isCompareMode }) => {
+function NeighbourhoodPopup({ features, onRemoveFeature, isCompareMode, regionalProfileAverages }) {
   const [sortKey, setSortKey] = useState(null);
   const [sortDirection, setSortDirection] = useState('desc');
 
@@ -65,6 +65,7 @@ const NeighbourhoodPopup = ({ features, onRemoveFeature, isCompareMode }) => {
       { key: 'visible_minority', label: 'Visible minorities' }
     ];
 
+
     return (
       <div className="max-h-96 w-max max-w-[800px] overflow-auto p-1 pr-2">
         <table className="w-max text-sm text-left border-collapse">
@@ -72,7 +73,8 @@ const NeighbourhoodPopup = ({ features, onRemoveFeature, isCompareMode }) => {
           <tr>
             <th className="p-2 font-bold text-gray-700 border-b align-bottom w-32 min-w-[128px]">Metric</th>
             {sortedFeatures.map(f => (
-              <th key={f.properties.DGUID} className="p-2 font-bold text-blue-600 border-b align-bottom w-40 min-w-[160px] max-w-[160px]">
+              <th key={f.properties.DGUID}
+                  className="p-2 font-bold text-blue-600 border-b align-bottom w-40 min-w-[160px] max-w-[160px]">
                 <div className="flex justify-between items-center gap-1 min-w-0">
                   <span className="truncate flex-1" title={f.properties.GEO_NAME}>{f.properties.GEO_NAME}</span>
                   <button
@@ -90,6 +92,10 @@ const NeighbourhoodPopup = ({ features, onRemoveFeature, isCompareMode }) => {
                 </div>
               </th>
             ))}
+            <th className="p-2 font-bold text-gray-700 border-b align-bottom w-32 min-w-[128px] bg-gray-50">
+              Region Avg
+            </th>
+
           </tr>
           </thead>
           <tbody>
@@ -110,11 +116,12 @@ const NeighbourhoodPopup = ({ features, onRemoveFeature, isCompareMode }) => {
                   {(f.properties[stat.key] || 0).toLocaleString()}
                 </td>
               ))}
+              <td className="p-2 text-gray-400 bg-gray-50">-</td>
             </tr>
           ))}
           <tr>
-            <td colSpan={sortedFeatures.length + 1} className="p-2 font-bold bg-gray-50 mt-4">Neighbourhood Profile
-              (%)
+            <td colSpan={sortedFeatures.length + 2} className="p-2 font-bold bg-gray-50 mt-4">
+              Neighbourhood Profile (%)
             </td>
           </tr>
           {PROFILE_STATS.map(stat => (
@@ -133,6 +140,9 @@ const NeighbourhoodPopup = ({ features, onRemoveFeature, isCompareMode }) => {
                   {(f.properties[stat.key] || 0).toFixed(0)}%
                 </td>
               ))}
+              <td className="p-2 font-semibold text-gray-800 bg-gray-50">
+                {regionalProfileAverages?.[stat.key] ?? '-'}%
+              </td>
             </tr>
           ))}
           </tbody>
