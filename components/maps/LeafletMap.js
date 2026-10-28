@@ -130,7 +130,7 @@ function LassoSelection({ lassoEnabled, setLassoEnabled, setSelectedNeighbourhoo
   return null
 }
 
-export default function LeafletMap({ geojson, rankings }) {
+export default function LeafletMap({ geojson, rankings, onRegionSelect, regionalProfileAverages }) {
   const [selectedNeighbourhoods, setSelectedNeighbourhoods] = useState([])
   const [popupPosition, setPopupPosition] = useState(null)
   const [lassoEnabled, setLassoEnabled] = useState(false)
@@ -139,7 +139,17 @@ export default function LeafletMap({ geojson, rankings }) {
   const featureClickedRef = useRef(false)
   const lassoEnabledRef = useRef(lassoEnabled)
   const compareEnabledRef = useRef(compareEnabled)
+  const [isMounted, setIsMounted] = useState(false)
 
+  useEffect(() => {
+    setIsMounted(true)
+  }, [])
+
+  useEffect(() => {
+    if (onRegionSelect) {
+      onRegionSelect(selectedNeighbourhoods.map(f => f.properties.DGUID));
+    }
+  }, [selectedNeighbourhoods, onRegionSelect]);
   useEffect(() => {
     lassoEnabledRef.current = lassoEnabled
     if (lassoEnabled) setCompareEnabled(false)
@@ -199,6 +209,10 @@ export default function LeafletMap({ geojson, rankings }) {
     })
   }
 
+  if (!isMounted) {
+    return <div className="w-full h-[60vh] md:h-full bg-gray-50 flex items-center justify-center text-gray-400">Loading map...</div>
+  }
+
   return (
     <div className="w-full h-[60vh] md:h-full overflow-hidden relative">
 
@@ -249,6 +263,7 @@ export default function LeafletMap({ geojson, rankings }) {
               features={selectedNeighbourhoods}
               onRemoveFeature={handleRemoveFeature}
               isCompareMode={compareEnabled}
+              regionalProfileAverages={regionalProfileAverages}
             />
           </Popup>
         )}
@@ -256,18 +271,38 @@ export default function LeafletMap({ geojson, rankings }) {
         <Legend categories={categories} />
       </MapContainer>
 
-      <div className="absolute top-4 right-4 flex flex-col gap-2" style={{ zIndex: 1000 }}>
+      <div className="absolute top-4 left-14 flex flex-row gap-2" style={{ zIndex: 1000 }}>
         <button
           onClick={() => setLassoEnabled(!lassoEnabled)}
-          className={`px-3 py-2 bg-white rounded shadow-md font-bold text-sm border-2 transition-colors ${lassoEnabled ? 'border-blue-500 text-blue-500' : 'border-transparent text-gray-700 hover:bg-gray-50'}`}
+          title="Toggle Lasso"
+          className={`p-2 flex items-center justify-center bg-white rounded shadow-md border-2 transition-colors ${lassoEnabled ? 'border-blue-500 text-blue-500 bg-blue-50' : 'border-transparent text-gray-700 hover:bg-gray-50'}`}
         >
-          {lassoEnabled ? 'Lasso Active' : 'Use Lasso'}
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M7 22a5 5 0 0 1-2-4" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3.3 14A6.8 6.8 0 0 1 2 10c0-4.4 4.5-8 10-8s10 3.6 10 8-4.5 8-10 8a12 12 0 0 1-5-1" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 18a2 2 0 1 0 0-4 2 2 0 0 0 0 4z" />
+          </svg>
         </button>
         <button
           onClick={() => setCompareEnabled(!compareEnabled)}
-          className={`px-3 py-2 bg-white rounded shadow-md font-bold text-sm border-2 transition-colors ${compareEnabled ? 'border-purple-500 text-purple-500' : 'border-transparent text-gray-700 hover:bg-gray-50'}`}
+          title="Select multiple"
+          className="p-2 bg-white rounded shadow hover:bg-gray-100 transition-colors"
         >
-          {compareEnabled ? 'Compare Active' : 'Compare'}
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            width="20"
+            height="20"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            {/* Multi-select icon */}
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+          </svg>
         </button>
       </div>
     </div>
