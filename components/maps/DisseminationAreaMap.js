@@ -18,6 +18,12 @@ const LayersControlOverlay = dynamic(() => import('react-leaflet').then(mod => m
 
 const MapControllerWrapper = dynamic(() => Promise.resolve(({ children }) => <>{children}</>), { ssr: false })
 
+const WATERLOO_REGION_BOUNDS = [
+  [43.2, -80.8],
+  [43.7, -80.2]
+];
+
+
 const categories = [
   { name: 1, color: '#00B88A', label: 'Most access' },
   { name: 2, color: '#DE54A0', label: 'Average access' },
@@ -361,6 +367,9 @@ export default function DisseminationAreaMap({ geojson, neighbourhoodGeojson, pa
         <MapContainer
             center={[43.45, -80.5]}
             zoom={11}
+            minZoom={10}
+            maxBounds={WATERLOO_REGION_BOUNDS}
+            maxBoundsViscosity={1.0}
             style={{ height: '100%', width: '100%' }}
             zoomControl={true}
             scrollWheelZoom={true}
