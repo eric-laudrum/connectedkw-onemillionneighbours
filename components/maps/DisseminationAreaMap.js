@@ -239,6 +239,53 @@ function LassoSelection({ lassoEnabled, setLassoEnabled, setSelectedNeighbourhoo
   return null
 }
 
+
+function CustomZoomControl() {
+  const { useMap } = require('react-leaflet')
+  const map = useMap()
+
+  // The default coordinates and zoom level to reset to
+  const defaultCenter = [43.45, -80.5]
+  const defaultZoom = 11
+
+  return (
+      <div
+          className="absolute top-4 left-4 flex flex-col bg-white rounded shadow-md overflow-hidden"
+          style={{ zIndex: 1000 }}
+          // Prevent map dragging or zooming when clicking these buttons
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+          onDoubleClick={(e) => e.stopPropagation()}
+          onWheel={(e) => e.stopPropagation()}
+      >
+        <button
+            onClick={(e) => { e.preventDefault(); map.zoomIn() }}
+            title="Zoom in"
+            className="w-8 h-8 flex items-center justify-center bg-white text-gray-700 hover:bg-gray-100 border-b border-gray-200 font-bold text-xl"
+        >
+          +
+        </button>
+        <button
+            onClick={(e) => { e.preventDefault(); map.setView(defaultCenter, defaultZoom) }}
+            title="Reset map view"
+            className="w-8 h-8 flex items-center justify-center bg-white text-gray-700 hover:bg-gray-100 border-b border-gray-200"
+        >
+          {/* Home Icon */}
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+          </svg>
+        </button>
+        <button
+            onClick={(e) => { e.preventDefault(); map.zoomOut() }}
+            title="Zoom out"
+            className="w-8 h-8 flex items-center justify-center bg-white text-gray-700 hover:bg-gray-100 font-bold text-xl"
+        >
+          &minus;
+        </button>
+      </div>
+  )
+}
+
 export default function DisseminationAreaMap({ geojson, neighbourhoodGeojson, parksGeojson, rankings, onRegionSelect, regionalProfileAverages }) {
   const [selectedNeighbourhoods, setSelectedNeighbourhoods] = useState([])
   const [popupPosition, setPopupPosition] = useState(null)
@@ -363,15 +410,21 @@ export default function DisseminationAreaMap({ geojson, neighbourhoodGeojson, pa
 
   return (
       <div className="w-full h-[60vh] md:h-full overflow-hidden relative">
-        <ParkPatternDefs />
+        <ParkPatternDefs/>
+        <style>{`
+          .leaflet-top.leaflet-left {
+            margin-left: 150px;
+            margin-top: 4px; 
+          }
+        `}</style>
         <MapContainer
             center={[43.45, -80.5]}
             zoom={11}
             minZoom={10}
             maxBounds={WATERLOO_REGION_BOUNDS}
             maxBoundsViscosity={1.0}
-            style={{ height: '100%', width: '100%' }}
-            zoomControl={true}
+            style={{height: '100%', width: '100%'}}
+            zoomControl={false}
             scrollWheelZoom={true}
         >
           <TileLayer
@@ -379,9 +432,9 @@ export default function DisseminationAreaMap({ geojson, neighbourhoodGeojson, pa
               url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
 
-          <Pane name="neighbourhoods" style={{ zIndex: 410 }} />
-          <Pane name="disseminationAreas" style={{ zIndex: 420 }} />
-          <Pane name="parks" style={{ zIndex: 430 }} />
+          <Pane name="neighbourhoods" style={{zIndex: 410}}/>
+          <Pane name="disseminationAreas" style={{zIndex: 420}}/>
+          <Pane name="parks" style={{zIndex: 430}}/>
 
           <LayersControl position="topleft">
             {neighbourhoodGeojson && (
@@ -418,6 +471,7 @@ export default function DisseminationAreaMap({ geojson, neighbourhoodGeojson, pa
           </LayersControl>
 
           <MapControllerWrapper>
+            <CustomZoomControl/>
             <MapController
                 selectedNeighbourhoods={selectedNeighbourhoods}
                 setSelectedNeighbourhoods={setSelectedNeighbourhoods}
@@ -444,11 +498,12 @@ export default function DisseminationAreaMap({ geojson, neighbourhoodGeojson, pa
                   minWidth={50}
               >
                 <div className="space-y-4">
-                  {clickedDA && <DisseminationAreaDetails feature={clickedDA} />}
-                  {clickedDA && selectedNeighbourhoods.length > 0 && <hr className="border-gray-300" />}
+                  {clickedDA && <DisseminationAreaDetails feature={clickedDA}/>}
+                  {clickedDA && selectedNeighbourhoods.length > 0 && <hr className="border-gray-300"/>}
 
                   <div>
-                    <p className="text-xs uppercase tracking-wide text-gray-500 mb-2">Aggregate dissemination area(s)</p>
+                    <p className="text-xs uppercase tracking-wide text-gray-500 mb-2">Aggregate dissemination
+                      area(s)</p>
                     <NeighbourhoodPopup
                         features={selectedNeighbourhoods}
                         onRemoveFeature={handleRemoveFeature}
@@ -460,20 +515,21 @@ export default function DisseminationAreaMap({ geojson, neighbourhoodGeojson, pa
               </Popup>
           )}
 
-          <Legend categories={categories} />
+          <Legend categories={categories}/>
         </MapContainer>
 
         {/* Action Buttons Overlay */}
-        <div className="absolute top-4 left-14 flex flex-row gap-2" style={{ zIndex: 1000 }}>
+        <div className="absolute top-4 left-16 flex flex-row gap-2" style={{ zIndex: 1000 }}>
           <button
               onClick={() => setLassoEnabled(!lassoEnabled)}
               title="Toggle Lasso"
               className={`p-2 flex items-center justify-center bg-white rounded shadow-md border-2 transition-colors ${lassoEnabled ? 'border-blue-500 text-blue-500 bg-blue-50' : 'border-transparent text-gray-700 hover:bg-gray-50'}`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M7 22a5 5 0 0 1-2-4" />
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3.3 14A6.8 6.8 0 0 1 2 10c0-4.4 4.5-8 10-8s10 3.6 10 8-4.5 8-10 8a12 12 0 0 1-5-1" />
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5 18a2 2 0 1 0 0-4 2 2 0 0 0 0 4z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M7 22a5 5 0 0 1-2-4"/>
+              <path strokeLinecap="round" strokeLinejoin="round"
+                    d="M3.3 14A6.8 6.8 0 0 1 2 10c0-4.4 4.5-8 10-8s10 3.6 10 8-4.5 8-10 8a12 12 0 0 1-5-1"/>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 18a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/>
             </svg>
           </button>
           <button
@@ -492,8 +548,8 @@ export default function DisseminationAreaMap({ geojson, neighbourhoodGeojson, pa
                 strokeLinecap="round"
                 strokeLinejoin="round"
             >
-              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-              <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
             </svg>
           </button>
         </div>
