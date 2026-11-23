@@ -11,15 +11,13 @@ const TileLayer = dynamic(() => import('react-leaflet').then(mod => mod.TileLaye
 const GeoJSON = dynamic(() => import('react-leaflet').then(mod => mod.GeoJSON), { ssr: false })
 const Popup = dynamic(() => import('react-leaflet').then(mod => mod.Popup), { ssr: false })
 const Pane = dynamic(() => import('react-leaflet').then(mod => mod.Pane), { ssr: false })
-const { LayersControl } = require('react-leaflet')
 
 const MapControllerWrapper = dynamic(() => Promise.resolve(({ children }) => <>{children}</>), { ssr: false })
 
 const WATERLOO_REGION_BOUNDS = [
   [43.2, -80.8],
   [43.7, -80.2]
-];
-
+]
 
 const categories = [
   { name: 1, color: '#00B88A', label: 'Most access' },
@@ -96,10 +94,12 @@ const DisseminationAreaDetails = ({ feature }) => {
           <td className="py-1 pr-2 text-left">Population (2021)</td>
           <td className="py-1 px-2 border-l border-gray-300">{Number(population_2021).toLocaleString()}</td>
         </tr>
-        <tr className="border-t border-gray-300">
-          <td className="py-1 pr-2 text-left">Population (2025 est.)</td>
-          <td className="py-1 px-2 border-l border-gray-300">{Number(population_2025_estimate).toLocaleString()}</td>
-        </tr>
+        {population_2025_estimate != null && (
+          <tr className="border-t border-gray-300">
+            <td className="py-1 pr-2 text-left">Population (2025 est.)</td>
+            <td className="py-1 px-2 border-l border-gray-300">{Number(population_2025_estimate).toLocaleString()}</td>
+          </tr>
+        )}
         <tr className="border-t border-gray-300">
           <td className="py-1 pr-2 text-left">Land area</td>
           <td className="py-1 px-2 border-l border-gray-300">{Number(LANDAREA).toLocaleString(undefined, { maximumFractionDigits: 2 })} km²</td>
@@ -111,7 +111,7 @@ const DisseminationAreaDetails = ({ feature }) => {
 }
 
 // Map Controller to manage active highlight states for selected Neighbourhoods
-function MapController({ selectedNeighbourhoods, setSelectedNeighbourhoods, setPopupPosition, setClickedDA, rankings, featureClickedRef, onBoundaryChange }) {
+function MapController({ selectedNeighbourhoods, setSelectedNeighbourhoods, setPopupPosition, setClickedDA, rankings, featureClickedRef, onBoundaryChange, isDA }) {
   const { useMap, useMapEvents } = require('react-leaflet')
   const map = useMap()
 
@@ -129,26 +129,36 @@ function MapController({ selectedNeighbourhoods, setSelectedNeighbourhoods, setP
         onBoundaryChange('ada')
       }
     }
-
   })
 
   useEffect(() => {
     if (!map) return
+    const idKey = isDA ? 'DAUID' : 'DGUID'
 
     const updateStyle = (layer) => {
-      // Only apply selected styling to Neighbourhoods (which have DGUID)
-      if (layer.feature && layer.feature.properties && layer.feature.properties.DGUID && layer.setStyle) {
-        const categoryNumber = rankings[layer.feature.properties.DGUID]
-        const category = categories.find(c => c.name === categoryNumber)
-        const isSelected = selectedNeighbourhoods.some(f => f.properties.DGUID === layer.feature.properties.DGUID)
+      // Only apply selected styling to Neighbourhoods (which have DGUID) or DAs (which have DAUID)
+      if (layer.feature && layer.feature.properties && layer.feature.properties[idKey] && layer.setStyle) {
+        const featureId = layer.feature.properties[idKey]
+        const isSelected = selectedNeighbourhoods.some(f => f.properties[idKey] === featureId)
 
-        layer.setStyle({
-          fillColor: category ? category.color : '#ccc',
-          weight: isSelected ? 4 : 2,
-          opacity: 1,
-          color: category ? category.color : '#ccc',
-          fillOpacity: isSelected ? 0.5 : 0.2
-        })
+        if (isDA) {
+          layer.setStyle({
+            ...baseStyle,
+            weight: isSelected ? 4 : baseStyle.weight,
+            opacity: isSelected ? 1 : baseStyle.opacity,
+            fillOpacity: isSelected ? 0.35 : 0
+          })
+        } else {
+          const categoryNumber = rankings[featureId]
+          const category = categories.find(c => c.name === categoryNumber)
+          layer.setStyle({
+            fillColor: category ? category.color : '#ccc',
+            weight: isSelected ? 4 : 2,
+            opacity: 1,
+            color: category ? category.color : '#ccc',
+            fillOpacity: isSelected ? 0.5 : 0.2
+          })
+        }
 
         if (isSelected && layer.bringToFront) {
           layer.bringToFront()
@@ -162,12 +172,12 @@ function MapController({ selectedNeighbourhoods, setSelectedNeighbourhoods, setP
         layer.eachLayer(subLayer => updateStyle(subLayer))
       }
     })
-  }, [map, selectedNeighbourhoods, rankings])
+  }, [map, selectedNeighbourhoods, rankings, isDA])
 
   return null
 }
 
-function LassoSelection({ lassoEnabled, setLassoEnabled, setSelectedNeighbourhoods, setPopupPosition, setClickedDA }) {
+function LassoSelection({ lassoEnabled, setLassoEnabled, setSelectedNeighbourhoods, setPopupPosition, setClickedDA, isDA }) {
   const { useMap } = require('react-leaflet')
   const map = useMap()
   const lassoRef = useRef(null)
@@ -189,11 +199,12 @@ function LassoSelection({ lassoEnabled, setLassoEnabled, setSelectedNeighbourhoo
 
         const handleLassoFinished = (event) => {
           const toggledFeatures = []
+          const idKey = isDA ? 'DAUID' : 'DGUID'
+
           event.layers.forEach(layer => {
             const processFeature = (feat) => {
-              // Ensure we only select Neighbourhoods (DGUID), not DAs
-              if (feat && feat.properties && feat.properties.DGUID) {
-                if (!toggledFeatures.some(f => f.properties.DGUID === feat.properties.DGUID)) {
+              if (feat && feat.properties && feat.properties[idKey]) {
+                if (!toggledFeatures.some(f => f.properties[idKey] === feat.properties[idKey])) {
                   toggledFeatures.push(feat)
                 }
               }
@@ -216,6 +227,7 @@ function LassoSelection({ lassoEnabled, setLassoEnabled, setSelectedNeighbourhoo
           setLassoEnabled(false)
         }
 
+        map.off('lasso.finished')
         map.on('lasso.finished', handleLassoFinished)
       })
     })
@@ -226,7 +238,7 @@ function LassoSelection({ lassoEnabled, setLassoEnabled, setSelectedNeighbourhoo
         map.off('lasso.finished')
       }
     }
-  }, [map, setSelectedNeighbourhoods, setPopupPosition, setClickedDA])
+  }, [map, setLassoEnabled, setSelectedNeighbourhoods, setPopupPosition, setClickedDA, isDA])
 
   useEffect(() => {
     if (!map || !lassoRef.current) return
@@ -244,7 +256,6 @@ function LassoSelection({ lassoEnabled, setLassoEnabled, setSelectedNeighbourhoo
 
   return null
 }
-
 
 function CustomZoomControl() {
   const { useMap } = require('react-leaflet')
@@ -271,18 +282,18 @@ function CustomZoomControl() {
     >
       <button
         onClick={(e) => {
-          e.preventDefault();
-          map.fitBounds(WATERLOO_REGION_BOUNDS);
+          e.preventDefault()
+          map.zoomIn()
         }}
-        title="Reset map view"
-        className="w-8 h-8 flex items-center justify-center bg-white text-gray-700 hover:bg-gray-100 border-b border-gray-200"
+        title="Zoom in"
+        className="w-8 h-8 flex items-center justify-center bg-white text-gray-700 hover:bg-gray-100 border-b border-gray-200 font-bold text-xl"
       >
         +
       </button>
       <button
         onClick={(e) => {
-          e.preventDefault();
-          map.fitBounds(WATERLOO_REGION_BOUNDS);
+          e.preventDefault()
+          map.fitBounds(WATERLOO_REGION_BOUNDS)
         }}
         title="Reset map view"
         className="w-8 h-8 flex items-center justify-center bg-white text-gray-700 hover:bg-gray-100 border-b border-gray-200"
@@ -296,9 +307,9 @@ function CustomZoomControl() {
       </button>
       <button
         onClick={(e) => {
-          e.preventDefault();
+          e.preventDefault()
           if (map.getZoom() > map.getMinZoom()) {
-            map.zoomOut();
+            map.zoomOut()
           }
         }}
         title="Zoom out"
@@ -315,7 +326,8 @@ export default function DisseminationAreaMap({
                                                neighbourhoodGeojson,
                                                parksGeojson,
                                                rankings,
-                                               boundaryType = 'ada', onBoundaryTypeChange,
+                                               boundaryType = 'ada',
+                                               onBoundaryTypeChange,
                                                onRegionSelect,
                                                regionalProfileAverages
                                              }) {
@@ -324,21 +336,24 @@ export default function DisseminationAreaMap({
   const [clickedDA, setClickedDA] = useState(null)
   const [lassoEnabled, setLassoEnabled] = useState(false)
   const [compareEnabled, setCompareEnabled] = useState(false)
+  const [activeBoundaryType, setActiveBoundaryType] = useState(boundaryType)
+  const [isMounted, setIsMounted] = useState(false)
 
   const featureClickedRef = useRef(false)
   const lassoEnabledRef = useRef(lassoEnabled)
   const compareEnabledRef = useRef(compareEnabled)
-  const boundaryTypeRef = useRef(boundaryType)
-  const [isMounted, setIsMounted] = useState(false)
+  const boundaryTypeRef = useRef(activeBoundaryType)
 
   useEffect(() => {
     setIsMounted(true)
   }, [])
 
-  const [internalBoundaryType, setInternalBoundaryType] = useState(boundaryType)
-  const activeBoundaryType = onBoundaryTypeChange ? boundaryType : internalBoundaryType
+  useEffect(() => {
+    setActiveBoundaryType(boundaryType)
+  }, [boundaryType])
+
   const handleBoundaryChange = (nextType) => {
-    setInternalBoundaryType(nextType)
+    setActiveBoundaryType(nextType)
     if (onBoundaryTypeChange) onBoundaryTypeChange(nextType)
   }
 
@@ -368,14 +383,15 @@ export default function DisseminationAreaMap({
     if (compareEnabled) setLassoEnabled(false)
   }, [compareEnabled])
 
-  const handleNeighbourhoodSelection = (neighbourhoodFeature, latlng, daFeature) => {
-    if (!neighbourhoodFeature) return;
+  const handleNeighbourhoodSelection = (targetFeature, latlng, daFeature) => {
+    if (!targetFeature) return
+    const activeIdKey = boundaryTypeRef.current === 'da' ? 'DAUID' : 'DGUID'
 
     if (compareEnabledRef.current) {
       setSelectedNeighbourhoods(prev => {
-        const isSelected = prev.some(f => f.properties.DGUID === neighbourhoodFeature.properties.DGUID)
+        const isSelected = prev.some(f => f.properties[activeIdKey] === targetFeature.properties[activeIdKey])
         if (isSelected) {
-          const newSelection = prev.filter(f => f.properties.DGUID !== neighbourhoodFeature.properties.DGUID)
+          const newSelection = prev.filter(f => f.properties[activeIdKey] !== targetFeature.properties[activeIdKey])
           if (newSelection.length === 0) {
             setPopupPosition(null)
             setClickedDA(null)
@@ -384,19 +400,19 @@ export default function DisseminationAreaMap({
         }
         setPopupPosition(latlng)
         setClickedDA(daFeature)
-        return [...prev, neighbourhoodFeature]
+        return [...prev, targetFeature]
       })
       return
     }
 
     setPopupPosition(latlng)
     setClickedDA(daFeature)
-    setSelectedNeighbourhoods([neighbourhoodFeature])
+    setSelectedNeighbourhoods([targetFeature])
   }
 
-  const handleRemoveFeature = (dguid) => {
+  const handleRemoveFeature = (featureId) => {
     setSelectedNeighbourhoods(prev => {
-      const newArray = prev.filter(f => f.properties.DGUID !== dguid)
+      const newArray = prev.filter(f => f.properties[idKey] !== featureId)
       if (newArray.length === 0) {
         setPopupPosition(null)
         setClickedDA(null)
@@ -415,6 +431,11 @@ export default function DisseminationAreaMap({
 
         if (lassoEnabledRef.current) return
 
+        if (boundaryTypeRef.current === 'da') {
+          handleNeighbourhoodSelection(feature, e.latlng, null)
+          return
+        }
+
         const neighbourhood = findContainingFeature(e.latlng, neighbourhoodGeojson?.features || [])
         handleNeighbourhoodSelection(neighbourhood, e.latlng, feature)
       },
@@ -423,10 +444,20 @@ export default function DisseminationAreaMap({
         e.target.bringToFront()
       },
       mouseout: (e) => {
+        if (boundaryTypeRef.current === 'da') {
+          const isSelected = selectedNeighbourhoods.some(f => f.properties.DAUID === feature.properties.DAUID)
+          e.target.setStyle({
+            ...baseStyle,
+            weight: isSelected ? 4 : baseStyle.weight,
+            opacity: isSelected ? 1 : baseStyle.opacity,
+            fillOpacity: isSelected ? 0.35 : 0
+          })
+          return
+        }
         e.target.setStyle(baseStyle)
       },
     })
-  }, [neighbourhoodGeojson])
+  }, [neighbourhoodGeojson, selectedNeighbourhoods])
 
   // Handle clicks if the DA layer is turned off and they click ADAs directly
   const onEachNeighbourhood = useMemo(() => (feature, layer) => {
@@ -457,6 +488,8 @@ export default function DisseminationAreaMap({
     return <div className="w-full h-[60vh] md:h-full bg-gray-50 flex items-center justify-center text-gray-400">Loading map...</div>
   }
 
+  const { LayersControl } = require('react-leaflet')
+
   return (
     <div className="w-full h-[60vh] md:h-full overflow-hidden relative">
       <ParkPatternDefs />
@@ -484,6 +517,7 @@ export default function DisseminationAreaMap({
           {neighbourhoodGeojson && (
             <LayersControl.BaseLayer checked={!isDA} name="Aggregate dissemination areas (access ranking)">
               <GeoJSON
+                key="ada-layer"
                 data={neighbourhoodGeojson}
                 style={neighbourhoodStyle}
                 onEachFeature={onEachNeighbourhood}
@@ -494,6 +528,7 @@ export default function DisseminationAreaMap({
           {geojson && (
             <LayersControl.BaseLayer checked={isDA} name="Dissemination areas">
               <GeoJSON
+                key="da-layer"
                 data={geojson}
                 style={baseStyle}
                 onEachFeature={onEachFeature}
@@ -523,6 +558,8 @@ export default function DisseminationAreaMap({
             setClickedDA={setClickedDA}
             rankings={rankings}
             featureClickedRef={featureClickedRef}
+            onBoundaryChange={handleBoundaryChange}
+            isDA={isDA}
           />
           <LassoSelection
             lassoEnabled={lassoEnabled}
@@ -530,32 +567,51 @@ export default function DisseminationAreaMap({
             setSelectedNeighbourhoods={setSelectedNeighbourhoods}
             setPopupPosition={setPopupPosition}
             setClickedDA={setClickedDA}
+            isDA={isDA}
           />
         </MapControllerWrapper>
 
         {selectedNeighbourhoods.length > 0 && popupPosition && (
           <Popup
-            key={`popup-${compareEnabled}-${selectedNeighbourhoods.length}`}
+            key={`popup-${isDA}-${compareEnabled}-${selectedNeighbourhoods.length}`}
             position={popupPosition}
             closeButton={false}
             maxWidth={800}
             minWidth={50}
           >
-            <div className="space-y-4">
-              {clickedDA && <DisseminationAreaDetails feature={clickedDA} />}
-              {clickedDA && selectedNeighbourhoods.length > 0 && <hr className="border-gray-300" />}
-
-              <div>
-                <p className="text-xs uppercase tracking-wide text-gray-500 mb-2">Aggregate dissemination
-                  area(s)</p>
-                <NeighbourhoodPopup
-                  features={selectedNeighbourhoods}
-                  onRemoveFeature={handleRemoveFeature}
-                  isCompareMode={compareEnabled}
-                  regionalProfileAverages={regionalProfileAverages}
-                />
+            {isDA ? (
+              <div className="space-y-4 max-h-80 overflow-y-auto">
+                {selectedNeighbourhoods.map((daFeature) => (
+                  <div key={daFeature.properties.DAUID} className="relative">
+                    {compareEnabled && (
+                      <button
+                        onClick={() => handleRemoveFeature(daFeature.properties.DAUID)}
+                        className="float-right text-xs text-gray-400 hover:text-gray-700"
+                      >
+                        &times;
+                      </button>
+                    )}
+                    <DisseminationAreaDetails feature={daFeature} />
+                  </div>
+                ))}
               </div>
-            </div>
+            ) : (
+              <div className="space-y-4">
+                {clickedDA && <DisseminationAreaDetails feature={clickedDA} />}
+                {clickedDA && selectedNeighbourhoods.length > 0 && <hr className="border-gray-300" />}
+
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-gray-500 mb-2">Aggregate dissemination
+                    area(s)</p>
+                  <NeighbourhoodPopup
+                    features={selectedNeighbourhoods}
+                    onRemoveFeature={handleRemoveFeature}
+                    isCompareMode={compareEnabled}
+                    regionalProfileAverages={regionalProfileAverages}
+                  />
+                </div>
+              </div>
+            )}
           </Popup>
         )}
 
@@ -603,7 +659,6 @@ export default function DisseminationAreaMap({
             <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
             <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
           </svg>
-
         </button>
       </div>
     </div>
