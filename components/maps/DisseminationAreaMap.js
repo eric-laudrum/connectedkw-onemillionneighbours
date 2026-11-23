@@ -11,9 +11,7 @@ const TileLayer = dynamic(() => import('react-leaflet').then(mod => mod.TileLaye
 const GeoJSON = dynamic(() => import('react-leaflet').then(mod => mod.GeoJSON), { ssr: false })
 const Popup = dynamic(() => import('react-leaflet').then(mod => mod.Popup), { ssr: false })
 const Pane = dynamic(() => import('react-leaflet').then(mod => mod.Pane), { ssr: false })
-const LayersControl = dynamic(() => import('react-leaflet').then(mod => mod.LayersControl), { ssr: false })
-const LayersControlOverlay = dynamic(() => import('react-leaflet').then(mod => mod.LayersControl.Overlay), { ssr: false })
-
+const { LayersControl } = require('react-leaflet')
 
 const MapControllerWrapper = dynamic(() => Promise.resolve(({ children }) => <>{children}</>), { ssr: false })
 
@@ -113,7 +111,7 @@ const DisseminationAreaDetails = ({ feature }) => {
 }
 
 // Map Controller to manage active highlight states for selected Neighbourhoods
-function MapController({ selectedNeighbourhoods, setSelectedNeighbourhoods, setPopupPosition, setClickedDA, rankings, featureClickedRef }) {
+function MapController({ selectedNeighbourhoods, setSelectedNeighbourhoods, setPopupPosition, setClickedDA, rankings, featureClickedRef, onBoundaryChange }) {
   const { useMap, useMapEvents } = require('react-leaflet')
   const map = useMap()
 
@@ -123,7 +121,15 @@ function MapController({ selectedNeighbourhoods, setSelectedNeighbourhoods, setP
       setSelectedNeighbourhoods([])
       setPopupPosition(null)
       setClickedDA(null)
+    },
+    baselayerchange(e) {
+      if (e.name === 'Dissemination areas') {
+        onBoundaryChange('da')
+      } else if (e.name === 'Aggregate dissemination areas (access ranking)') {
+        onBoundaryChange('ada')
+      }
     }
+
   })
 
   useEffect(() => {
@@ -329,15 +335,22 @@ export default function DisseminationAreaMap({
     setIsMounted(true)
   }, [])
 
-  const isDA = boundaryType === 'da'
+  const [internalBoundaryType, setInternalBoundaryType] = useState(boundaryType)
+  const activeBoundaryType = onBoundaryTypeChange ? boundaryType : internalBoundaryType
+  const handleBoundaryChange = (nextType) => {
+    setInternalBoundaryType(nextType)
+    if (onBoundaryTypeChange) onBoundaryTypeChange(nextType)
+  }
+
+  const isDA = activeBoundaryType === 'da'
   const idKey = isDA ? 'DAUID' : 'DGUID'
 
   useEffect(() => {
-    boundaryTypeRef.current = boundaryType
+    boundaryTypeRef.current = activeBoundaryType
     setSelectedNeighbourhoods([])
     setPopupPosition(null)
     setClickedDA(null)
-  }, [boundaryType])
+  }, [activeBoundaryType])
 
   useEffect(() => {
     if (onRegionSelect) {
@@ -469,27 +482,27 @@ export default function DisseminationAreaMap({
 
         <LayersControl position="topleft">
           {neighbourhoodGeojson && (
-            <LayersControlOverlay checked name="Aggregate dissemination areas (access ranking)">
+            <LayersControl.BaseLayer checked={!isDA} name="Aggregate dissemination areas (access ranking)">
               <GeoJSON
                 data={neighbourhoodGeojson}
                 style={neighbourhoodStyle}
                 onEachFeature={onEachNeighbourhood}
                 pane="neighbourhoods"
               />
-            </LayersControlOverlay>
+            </LayersControl.BaseLayer>
           )}
           {geojson && (
-            <LayersControlOverlay checked name="Dissemination areas">
+            <LayersControl.BaseLayer checked={isDA} name="Dissemination areas">
               <GeoJSON
                 data={geojson}
                 style={baseStyle}
                 onEachFeature={onEachFeature}
                 pane="disseminationAreas"
               />
-            </LayersControlOverlay>
+            </LayersControl.BaseLayer>
           )}
           {parksGeojson && (
-            <LayersControlOverlay name={parksLayerName}>
+            <LayersControl.Overlay name={parksLayerName}>
               <GeoJSON
                 data={parksGeojson}
                 style={parkStyle}
@@ -497,7 +510,7 @@ export default function DisseminationAreaMap({
                 interactive={false}
                 pane="parks"
               />
-            </LayersControlOverlay>
+            </LayersControl.Overlay>
           )}
         </LayersControl>
 
