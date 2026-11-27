@@ -1,6 +1,7 @@
 'use client'
 import { useState, useMemo, useRef, useEffect } from 'react'
 import dynamic from 'next/dynamic'
+import { Loader } from '@googlemaps/js-api-loader'
 import Legend from './LeafletMapLegend'
 import NeighbourhoodPopup from './NeighbourhoodPopup'
 import findContainingFeature from 'components/one-million-neighbours/utils/findContainingFeature'
@@ -17,6 +18,26 @@ const MapControllerWrapper = dynamic(() => Promise.resolve(({ children }) => <>{
 const WATERLOO_REGION_BOUNDS = [
   [43.2, -80.8],
   [43.7, -80.2]
+]
+
+const geocoderLoader = new Loader({
+  apiKey: process.env.NEXT_PUBLIC_GOOGLE_API_KEY,
+  version: 'weekly',
+  libraries: ['maps'],
+})
+
+const ADDRESS_ERROR = 'Enter a valid address in Waterloo Region.'
+const ADDRESS_UNAVAILABLE_ERROR = 'Address search is unavailable. Please try again.'
+const SPECIFIC_LOCATION_TYPES = [
+  'street_address',
+  'premise',
+  'subpremise',
+  'postal_code',
+  'route',
+  'intersection',
+  'establishment',
+  'point_of_interest',
+  'plus_code',
 ]
 
 const categories = [
@@ -116,7 +137,7 @@ const DisseminationAreaDetails = ({ feature }) => {
 }
 
 // Map Controller to manage active highlight states for selected Neighbourhoods
-function MapController({ selectedNeighbourhoods, setSelectedNeighbourhoods, setPopupPosition, setClickedDA, rankings, featureClickedRef, onBoundaryChange, isDA }) {
+function MapController({ selectedNeighbourhoods, setSelectedNeighbourhoods, setPopupPosition, setClickedDA, rankings, featureClickedRef, onBoundaryChange, isDA, focusedLocation }) {
   const { useMap, useMapEvents } = require('react-leaflet')
   const map = useMap()
 
@@ -135,6 +156,11 @@ function MapController({ selectedNeighbourhoods, setSelectedNeighbourhoods, setP
       }
     }
   })
+
+  useEffect(() => {
+    if (!focusedLocation) return
+    map.flyTo([focusedLocation.lat, focusedLocation.lng], Math.max(map.getZoom(), 13))
+  }, [map, focusedLocation])
 
   useEffect(() => {
     if (!map) return
@@ -337,15 +363,37 @@ export default function DisseminationAreaMap({
   const [lassoEnabled, setLassoEnabled] = useState(false)
   const [compareEnabled, setCompareEnabled] = useState(false)
   const [isMounted, setIsMounted] = useState(false)
+  const [geocoder, setGeocoder] = useState(null)
+  const [addressQuery, setAddressQuery] = useState('')
+  const [addressError, setAddressError] = useState('')
+  const [isSearching, setIsSearching] = useState(false)
+  const [focusedLocation, setFocusedLocation] = useState(null)
 
   const featureClickedRef = useRef(false)
   const lassoEnabledRef = useRef(lassoEnabled)
   const compareEnabledRef = useRef(compareEnabled)
   const boundaryTypeRef = useRef(boundaryType)
   const selectedNeighbourhoodsRef = useRef([])
+  const addressRequestRef = useRef(0)
 
   useEffect(() => {
     setIsMounted(true)
+  }, [])
+
+  useEffect(() => {
+    let isActive = true
+
+    geocoderLoader.importLibrary('geocoding')
+      .then(({ Geocoder }) => {
+        if (isActive) setGeocoder(new Geocoder())
+      })
+      .catch(() => {
+        if (isActive) setAddressError(ADDRESS_UNAVAILABLE_ERROR)
+      })
+
+    return () => {
+      isActive = false
+    }
   }, [])
 
   useEffect(() => {
@@ -419,6 +467,73 @@ export default function DisseminationAreaMap({
     setClickedDA(daFeature)
     selectedNeighbourhoodsRef.current = [targetFeature]
     setSelectedNeighbourhoods([targetFeature])
+  }
+
+  const handleAddressSearch = (event) => {
+    event.preventDefault()
+    const query = addressQuery.trim()
+
+    if (!query) {
+      setAddressError(ADDRESS_ERROR)
+      return
+    }
+    if (!geocoder) {
+      setAddressError(ADDRESS_UNAVAILABLE_ERROR)
+      return
+    }
+
+    const requestId = ++addressRequestRef.current
+    setIsSearching(true)
+    setAddressError('')
+
+    geocoder.geocode({
+      address: query,
+      componentRestrictions: { country: 'CA' },
+      bounds: { south: 43.2, west: -80.8, north: 43.7, east: -80.2 },
+    }, (results, status) => {
+      if (requestId !== addressRequestRef.current) return
+      setIsSearching(false)
+
+      if (status !== 'OK' || !results?.length) {
+        setAddressError(status === 'ZERO_RESULTS' ? ADDRESS_ERROR : ADDRESS_UNAVAILABLE_ERROR)
+        return
+      }
+
+      let match = null
+      for (const result of results) {
+        if (!result.types?.some(type => SPECIFIC_LOCATION_TYPES.includes(type))) continue
+
+        const location = result.geometry?.location
+        if (!location) continue
+
+        const latlng = { lat: location.lat(), lng: location.lng() }
+        const daFeature = findContainingFeature(latlng, geojson?.features || [])
+        if (!daFeature) continue
+
+        const adaFeature = findContainingFeature(latlng, neighbourhoodGeojson?.features || [])
+        const activeType = boundaryTypeRef.current
+        if (activeType === 'ada' && !adaFeature) continue
+
+        match = { result, latlng, daFeature, adaFeature, activeType }
+        break
+      }
+
+      if (!match) {
+        setAddressError(ADDRESS_ERROR)
+        return
+      }
+
+      const { result, latlng, daFeature, adaFeature, activeType } = match
+      const targetFeature = activeType === 'da' ? daFeature : adaFeature
+
+      setAddressQuery(result.formatted_address || query)
+      setAddressError('')
+      setFocusedLocation(latlng)
+      setLassoEnabled(false)
+      compareEnabledRef.current = false
+      setCompareEnabled(false)
+      handleNeighbourhoodSelection(targetFeature, latlng, null)
+    })
   }
 
   const handleRemoveFeature = (featureId) => {
@@ -501,7 +616,43 @@ export default function DisseminationAreaMap({
   const { LayersControl } = require('react-leaflet')
 
   return (
-    <div className="w-full h-[60vh] md:h-full overflow-hidden relative">
+    <div className="w-full h-[60vh] md:h-full flex flex-col bg-white">
+      <div className="border-b border-gray-200 bg-white p-3">
+        <form onSubmit={handleAddressSearch} aria-busy={isSearching}>
+          <label htmlFor="region-address-search" className="block text-xs font-semibold text-gray-700 mb-1">
+            Find an area by address or postal code
+          </label>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <input
+              id="region-address-search"
+              type="search"
+              value={addressQuery}
+              onChange={(event) => {
+                setAddressQuery(event.target.value)
+                setAddressError('')
+              }}
+              placeholder="e.g. 200 King St W or N2L 1A1"
+              autoComplete="off"
+              disabled={isSearching}
+              aria-describedby={addressError ? 'region-address-error' : undefined}
+              className="min-w-0 flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50"
+            />
+            <button
+              type="submit"
+              disabled={isSearching}
+              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-wait disabled:opacity-60"
+            >
+              {isSearching ? 'Searching…' : 'Find area'}
+            </button>
+          </div>
+          {addressError && (
+            <p id="region-address-error" role="alert" className="mt-2 text-xs text-red-600">
+              {addressError}
+            </p>
+          )}
+        </form>
+      </div>
+      <div className="w-full flex-1 min-h-0 overflow-hidden relative">
       <ParkPatternDefs />
       <style>{'.leaflet-top.leaflet-left { margin-left: 150px; margin-top: 4px; }'}</style>
       <MapContainer
@@ -570,6 +721,7 @@ export default function DisseminationAreaMap({
             featureClickedRef={featureClickedRef}
             onBoundaryChange={handleBoundaryChange}
             isDA={isDA}
+            focusedLocation={focusedLocation}
           />
           <LassoSelection
             lassoEnabled={lassoEnabled}
@@ -670,6 +822,7 @@ export default function DisseminationAreaMap({
             <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
           </svg>
         </button>
+      </div>
       </div>
     </div>
   )
