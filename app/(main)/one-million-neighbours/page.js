@@ -20,7 +20,7 @@ export default async function OneMillionNeighboursPage() {
   const parks = await getParks()
 
   return (
-    <div className="container mx-auto px-4 py-16">
+    <div className="container mx-auto px-4 pt-8 pb-16">
       <div className="mb-6">
         <h1 className="text-4xl font-bold mb-6 text-center">Who Has Access?</h1>
         <p className="text-2xl font-bold mb-6 text-center">Mapping neighbourhood services in Waterloo Region</p>
