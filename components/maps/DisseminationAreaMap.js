@@ -40,6 +40,11 @@ const highlightStyle = {
   opacity: 1,
 }
 
+const getDAStyle = (isSelected) => ({
+  ...baseStyle,
+  ...(isSelected ? { weight: 4, opacity: 1, fillOpacity: 0.35 } : {}),
+})
+
 const PARK_GREEN = '#166534'
 const PARK_LIGHT_GREEN = '#bbf7d0'
 const PARK_PATTERN_ID = 'park-trees-pattern'
@@ -139,15 +144,10 @@ function MapController({ selectedNeighbourhoods, setSelectedNeighbourhoods, setP
       // Only apply selected styling to Neighbourhoods (which have DGUID) or DAs (which have DAUID)
       if (layer.feature && layer.feature.properties && layer.feature.properties[idKey] && layer.setStyle) {
         const featureId = layer.feature.properties[idKey]
-        const isSelected = selectedNeighbourhoods.some(f => f.properties[idKey] === featureId)
+        const isSelected = selectedNeighbourhoods.some(f => String(f.properties[idKey]) === String(featureId))
 
         if (isDA) {
-          layer.setStyle({
-            ...baseStyle,
-            weight: isSelected ? 4 : baseStyle.weight,
-            opacity: isSelected ? 1 : baseStyle.opacity,
-            fillOpacity: isSelected ? 0.35 : 0
-          })
+          layer.setStyle(getDAStyle(isSelected))
         } else {
           const categoryNumber = rankings[featureId]
           const category = categories.find(c => c.name === categoryNumber)
@@ -336,36 +336,44 @@ export default function DisseminationAreaMap({
   const [clickedDA, setClickedDA] = useState(null)
   const [lassoEnabled, setLassoEnabled] = useState(false)
   const [compareEnabled, setCompareEnabled] = useState(false)
-  const [activeBoundaryType, setActiveBoundaryType] = useState(boundaryType)
   const [isMounted, setIsMounted] = useState(false)
 
   const featureClickedRef = useRef(false)
   const lassoEnabledRef = useRef(lassoEnabled)
   const compareEnabledRef = useRef(compareEnabled)
-  const boundaryTypeRef = useRef(activeBoundaryType)
+  const boundaryTypeRef = useRef(boundaryType)
+  const selectedNeighbourhoodsRef = useRef([])
 
   useEffect(() => {
     setIsMounted(true)
   }, [])
 
   useEffect(() => {
-    setActiveBoundaryType(boundaryType)
-  }, [boundaryType])
+    selectedNeighbourhoodsRef.current = selectedNeighbourhoods
+  }, [selectedNeighbourhoods])
 
   const handleBoundaryChange = (nextType) => {
-    setActiveBoundaryType(nextType)
-    if (onBoundaryTypeChange) onBoundaryTypeChange(nextType)
-  }
+    if (nextType === boundaryType) return
 
-  const isDA = activeBoundaryType === 'da'
-  const idKey = isDA ? 'DAUID' : 'DGUID'
-
-  useEffect(() => {
-    boundaryTypeRef.current = activeBoundaryType
+    // Update the ref immediately so the next click cannot use the previous region type.
+    boundaryTypeRef.current = nextType
     setSelectedNeighbourhoods([])
     setPopupPosition(null)
     setClickedDA(null)
-  }, [activeBoundaryType])
+    setLassoEnabled(false)
+    if (onBoundaryTypeChange) onBoundaryTypeChange(nextType)
+  }
+
+  const isDA = boundaryType === 'da'
+  const idKey = isDA ? 'DAUID' : 'DGUID'
+
+  useEffect(() => {
+    boundaryTypeRef.current = boundaryType
+    setSelectedNeighbourhoods([])
+    setPopupPosition(null)
+    setClickedDA(null)
+    setLassoEnabled(false)
+  }, [boundaryType])
 
   useEffect(() => {
     if (onRegionSelect) {
@@ -389,30 +397,34 @@ export default function DisseminationAreaMap({
 
     if (compareEnabledRef.current) {
       setSelectedNeighbourhoods(prev => {
-        const isSelected = prev.some(f => f.properties[activeIdKey] === targetFeature.properties[activeIdKey])
-        if (isSelected) {
-          const newSelection = prev.filter(f => f.properties[activeIdKey] !== targetFeature.properties[activeIdKey])
-          if (newSelection.length === 0) {
-            setPopupPosition(null)
-            setClickedDA(null)
-          }
-          return newSelection
+        const isSelected = prev.some(f => String(f.properties[activeIdKey]) === String(targetFeature.properties[activeIdKey]))
+        const newSelection = isSelected
+          ? prev.filter(f => String(f.properties[activeIdKey]) !== String(targetFeature.properties[activeIdKey]))
+          : [...prev, targetFeature]
+
+        selectedNeighbourhoodsRef.current = newSelection
+        if (newSelection.length === 0) {
+          setPopupPosition(null)
+          setClickedDA(null)
+        } else {
+          setPopupPosition(latlng)
+          setClickedDA(daFeature)
         }
-        setPopupPosition(latlng)
-        setClickedDA(daFeature)
-        return [...prev, targetFeature]
+        return newSelection
       })
       return
     }
 
     setPopupPosition(latlng)
     setClickedDA(daFeature)
+    selectedNeighbourhoodsRef.current = [targetFeature]
     setSelectedNeighbourhoods([targetFeature])
   }
 
   const handleRemoveFeature = (featureId) => {
     setSelectedNeighbourhoods(prev => {
-      const newArray = prev.filter(f => f.properties[idKey] !== featureId)
+      const newArray = prev.filter(f => String(f.properties[idKey]) !== String(featureId))
+      selectedNeighbourhoodsRef.current = newArray
       if (newArray.length === 0) {
         setPopupPosition(null)
         setClickedDA(null)
@@ -432,6 +444,9 @@ export default function DisseminationAreaMap({
         if (lassoEnabledRef.current) return
 
         if (boundaryTypeRef.current === 'da') {
+          const isSelected = selectedNeighbourhoodsRef.current.some(f => String(f.properties.DAUID) === String(feature.properties.DAUID))
+          const willBeSelected = compareEnabledRef.current ? !isSelected : true
+          e.target.setStyle(getDAStyle(willBeSelected))
           handleNeighbourhoodSelection(feature, e.latlng, null)
           return
         }
@@ -445,19 +460,14 @@ export default function DisseminationAreaMap({
       },
       mouseout: (e) => {
         if (boundaryTypeRef.current === 'da') {
-          const isSelected = selectedNeighbourhoods.some(f => f.properties.DAUID === feature.properties.DAUID)
-          e.target.setStyle({
-            ...baseStyle,
-            weight: isSelected ? 4 : baseStyle.weight,
-            opacity: isSelected ? 1 : baseStyle.opacity,
-            fillOpacity: isSelected ? 0.35 : 0
-          })
+          const isSelected = selectedNeighbourhoodsRef.current.some(f => String(f.properties.DAUID) === String(feature.properties.DAUID))
+          e.target.setStyle(getDAStyle(isSelected))
           return
         }
         e.target.setStyle(baseStyle)
       },
     })
-  }, [neighbourhoodGeojson, selectedNeighbourhoods])
+  }, [neighbourhoodGeojson])
 
   // Handle clicks if the DA layer is turned off and they click ADAs directly
   const onEachNeighbourhood = useMemo(() => (feature, layer) => {
@@ -466,7 +476,7 @@ export default function DisseminationAreaMap({
       featureClickedRef.current = true
       setTimeout(() => { featureClickedRef.current = false }, 50)
 
-      if (lassoEnabledRef.current) return
+      if (lassoEnabledRef.current || boundaryTypeRef.current !== 'ada') return
 
       handleNeighbourhoodSelection(feature, e.latlng, null)
     })

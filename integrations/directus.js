@@ -955,16 +955,50 @@ const createEvent = async (eventData) => {
   }
 };
 
+const ADA_ASSET_SCORE_FIELDS = {
+  assets_parks_score_2025: 'green_space_score_2025',
+  assets_schools_score_2025: 'school_score_2025',
+  assets_libraries_score_2025: 'library_score_2025',
+  assets_health_score_2025: 'health_score_2025',
+  assets_transit_score_2025: 'transit_score_2025',
+  assets_community_spaces_score_2025: 'community_score_2025',
+  assets_childcare_score_2025: 'child_care_score_2025',
+};
+
+const DA_ASSET_SCORE_FIELDS = {
+  assets_parks_score_2025: 'park_score_2025_normalized',
+  assets_schools_score_2025: 'school_score_2025_normalized',
+  assets_libraries_score_2025: 'library_score_2025_normalized',
+  assets_health_score_2025: 'health_score_2025_normalized',
+  assets_transit_score_2025: 'transit_score_2025_normalized',
+  assets_community_spaces_score_2025: 'community_score_2025_normalized',
+  assets_childcare_score_2025: 'child_care_score_2025_normalized',
+};
+
+const getAssetScores = (row, scoreFields) => Object.entries(scoreFields).reduce((scores, [assetField, sourceField]) => {
+  scores[assetField] = row?.[sourceField];
+  return scores;
+}, {});
+
 const getNeighbourhoodData = async () => {
-  const data = await directus.request(
-    readItems('Waterloo_Region_ADAs_Properties', {
-      fields: '*',
-    })
-  );
+  const [data, adaScores] = await Promise.all([
+    directus.request(readItems('Waterloo_Region_ADAs_Properties', { fields: '*' })),
+    directus.request(readItems('ada_with_scores', {
+      fields: ['ADAUID', 'population_2025_estimate', ...Object.values(ADA_ASSET_SCORE_FIELDS)],
+      limit: -1,
+    })),
+  ]);
 
-  console.log(data[0]);
+  const scoresByDguid = new Map(adaScores.map(scores => [scores.ADAUID, scores]));
 
-  return data;
+  return data.map(neighbourhood => {
+    const scores = scoresByDguid.get(neighbourhood.DGUID?.slice(-8));
+    return {
+      ...neighbourhood,
+      population_2025_estimate: scores?.population_2025_estimate,
+      ...getAssetScores(scores, ADA_ASSET_SCORE_FIELDS),
+    };
+  });
 }
 
 const getNeighbourhoodGeography = async () => {
@@ -979,13 +1013,24 @@ const getNeighbourhoodGeography = async () => {
 
 const getDisseminationAreas = async () => {
   const data = await directus.request(
-    readItems('onemill_season9_test', {
-      fields: ['DAUID', 'city', 'LANDAREA', 'population_2021', 'population_2025_estimate', 'geometry'],
+    readItems('map_for_web_season9', {
+      fields: [
+        'DAUID',
+        'city',
+        'LANDAREA',
+        'population_2021',
+        'population_2025_estimate',
+        ...Object.values(DA_ASSET_SCORE_FIELDS),
+        'geometry',
+      ],
       limit: -1,
     })
   );
 
-  return data
+  return data.map(area => ({
+    ...area,
+    ...getAssetScores(area, DA_ASSET_SCORE_FIELDS),
+  }));
 };
 
 const getParks = async () => {

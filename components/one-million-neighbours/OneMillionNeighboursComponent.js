@@ -9,12 +9,13 @@ import AssetFilters from "components/one-million-neighbours/AssetFilters";
 import OneMillionNeighboursTable from "components/one-million-neighbours/OneMillionNeighboursTable";
 
 const ASSET_TYPES = [
-    { key: 'parks', label: 'Green Space', dataKey: 'assets_parks_count', scoreKey: 'assets_parks_score' },
-    { key: 'schools', label: 'Schools', dataKey: 'assets_schools_count', scoreKey: 'assets_schools_score' },
-    { key: 'libraries', label: 'Libraries', dataKey: 'assets_libraries_count', scoreKey: 'assets_libraries_score' },
-    { key: 'health', label: 'Healthcare', dataKey: 'assets_health_count', scoreKey: 'assets_health_score' },
-    { key: 'transit', label: 'Transit', dataKey: 'assets_transit_count', scoreKey: 'assets_transit_score' },
-    { key: 'community_spaces', label: 'Community Spaces', dataKey: 'assets_community_spaces_count', scoreKey: 'assets_community_spaces_score' },
+    { key: 'parks', label: 'Green Space', scoreKey: 'assets_parks_score_2025' },
+    { key: 'schools', label: 'Schools', scoreKey: 'assets_schools_score_2025' },
+    { key: 'libraries', label: 'Libraries', scoreKey: 'assets_libraries_score_2025' },
+    { key: 'health', label: 'Healthcare', scoreKey: 'assets_health_score_2025' },
+    { key: 'transit', label: 'Transit', scoreKey: 'assets_transit_score_2025' },
+    { key: 'community_spaces', label: 'Community Spaces', scoreKey: 'assets_community_spaces_score_2025' },
+    { key: 'childcare', label: 'Childcare', scoreKey: 'assets_childcare_score_2025' },
 ];
 
 const PROFILE_STATS = [
@@ -46,6 +47,7 @@ export default function OneMillionNeighboursComponent({ disseminationAreas, park
         health: true,
         transit: true,
         community_spaces: true,
+        childcare: true,
     });
 
     const [boundaryType, setBoundaryType] = useState('ada');
@@ -91,9 +93,6 @@ export default function OneMillionNeighboursComponent({ disseminationAreas, park
     const idField = isDA ? 'DAUID' : 'DGUID';
 
     const rankedAdaData = calculateCombinedAssetRanks(selectedAssets, neighbourhoodData);
-    const rankedDataset = isDA
-      ? calculateCombinedAssetRanks(selectedAssets, disseminationAreas)
-      : rankedAdaData;
 
     let selectionTitle = null;
     let selectionStats = null;
@@ -109,14 +108,10 @@ export default function OneMillionNeighboursComponent({ disseminationAreas, park
             const stats = {};
             const scores = {};
             const profileStats = {};
-            const pop = Number(data.population_2021) || 0;
-
             ASSET_TYPES.forEach(asset => {
-                const count = Number(data[asset.dataKey]) || 0;
-                stats[asset.key] = pop > 0 && data[asset.dataKey] !== undefined
-                  ? ((count / pop) * 1000).toFixed(1)
-                  : Number(data[asset.scoreKey] ?? 0).toFixed(2);
-                scores[asset.key] = Number(data[asset.scoreKey]) || 0;
+                const score = Number(data[asset.scoreKey]) || 0;
+                stats[asset.key] = score.toFixed(2);
+                scores[asset.key] = score;
             });
 
             PROFILE_STATS.forEach(stat => {
@@ -148,16 +143,13 @@ export default function OneMillionNeighboursComponent({ disseminationAreas, park
             }, {});
             selectionRankTier = getClusterRankTier(cluster, selectedAssets, rankedAdaData);
         } else {
-            selectionStats = ASSET_TYPES.reduce((acc, asset) => {
-                const totalAssets = activeData.reduce((sum, n) => sum + (Number(n[asset.dataKey]) || 0), 0);
-                const totalPopulation = activeData.reduce((sum, n) => sum + (Number(n.population_2021) || 0), 0);
-                acc[asset.key] = totalPopulation > 0 ? ((totalAssets / totalPopulation) * 1000).toFixed(1) : '-';
+            selectionScores = ASSET_TYPES.reduce((acc, asset) => {
+                const totalScore = activeData.reduce((sum, area) => sum + (Number(area[asset.scoreKey]) || 0), 0);
+                acc[asset.key] = activeData.length > 0 ? totalScore / activeData.length : 0;
                 return acc;
             }, {});
-
-            selectionScores = ASSET_TYPES.reduce((acc, asset) => {
-                const totalScore = activeData.reduce((sum, n) => sum + (Number(n[asset.scoreKey]) || 0), 0);
-                acc[asset.key] = activeData.length > 0 ? (totalScore / activeData.length) : 0;
+            selectionStats = ASSET_TYPES.reduce((acc, asset) => {
+                acc[asset.key] = selectionScores[asset.key].toFixed(2);
                 return acc;
             }, {});
         }
@@ -184,22 +176,20 @@ export default function OneMillionNeighboursComponent({ disseminationAreas, park
     }, []);
 
     const totalItems = activeDataset.length;
+    const daRegionalScores = isDA ? calculateClusterScores(activeDataset) : null;
 
-    const regionalAverages = ASSET_TYPES.reduce((acc, asset) => {
+    const regionalScores = ASSET_TYPES.reduce((acc, asset) => {
         if (isDA) {
-            const totalScore = activeDataset.reduce((sum, n) => sum + (Number(n[asset.scoreKey]) || 0), 0);
-            acc[asset.key] = totalItems > 0 ? (totalScore / totalItems).toFixed(2) : '0.00';
+            acc[asset.key] = daRegionalScores[asset.scoreKey] ?? 0;
         } else {
-            const totalAssets = activeDataset.reduce((sum, n) => sum + (Number(n[asset.dataKey]) || 0), 0);
-            const totalPopulation = activeDataset.reduce((sum, n) => sum + (Number(n.population_2021) || 0), 0);
-            acc[asset.key] = totalPopulation > 0 ? ((totalAssets / totalPopulation) * 1000).toFixed(2) : '0.00';
+            const totalScore = activeDataset.reduce((sum, area) => sum + (Number(area[asset.scoreKey]) || 0), 0);
+            acc[asset.key] = totalItems > 0 ? totalScore / totalItems : 0;
         }
         return acc;
     }, {});
 
-    const regionalScores = ASSET_TYPES.reduce((acc, asset) => {
-        const totalScore = activeDataset.reduce((sum, n) => sum + (Number(n[asset.scoreKey]) || 0), 0);
-        acc[asset.key] = totalItems > 0 ? (totalScore / totalItems) : 0;
+    const regionalAverages = ASSET_TYPES.reduce((acc, asset) => {
+        acc[asset.key] = regionalScores[asset.key].toFixed(2);
         return acc;
     }, {});
 
@@ -209,8 +199,8 @@ export default function OneMillionNeighboursComponent({ disseminationAreas, park
         return acc;
     }, {});
 
-    const rankings = rankedDataset.reduce((acc, item) => {
-        acc[String(item[idField])] = item.combined_rank;
+    const rankings = rankedAdaData.reduce((acc, item) => {
+        acc[String(item.DGUID)] = item.combined_rank;
         return acc;
     }, {});
 
